@@ -1572,8 +1572,11 @@ static int btrfs_get_device_extents(u64 chunk_object,
 
 static int calc_num_stripes(u64 type)
 {
+	/* FIXME: raid10c34 ok? */
 	if (type & (BTRFS_BLOCK_GROUP_RAID0 |
 		    BTRFS_BLOCK_GROUP_RAID10 |
+		    BTRFS_BLOCK_GROUP_RAID10C3 |
+		    BTRFS_BLOCK_GROUP_RAID10C4 |
 		    BTRFS_BLOCK_GROUP_RAID5 |
 		    BTRFS_BLOCK_GROUP_RAID6))
 		return 0;

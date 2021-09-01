@@ -100,6 +100,12 @@ static const struct btrfs_feature mkfs_features[] = {
 		NULL, 0,
 		NULL, 0,
 		"RAID1 with 3 or 4 copies" },
+	{ "raid10c34", BTRFS_FEATURE_INCOMPAT_RAID10C34,
+		"raid10c34",
+		VERSION_TO_STRING2(5,16),
+		NULL, 0,
+		NULL, 0,
+		"RAID10 with 3 or 4 copies" },
 #ifdef BTRFS_ZONED
 	{ "zoned", BTRFS_FEATURE_INCOMPAT_ZONED,
 		"zoned",

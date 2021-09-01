@@ -520,6 +520,10 @@ static int print_filesystem_usage_overall(int fd, struct chunk_info *chunkinfo,
 			ratio = 2;
 		else if (flags & BTRFS_BLOCK_GROUP_RAID10)
 			ratio = 2;
+		else if (flags & BTRFS_BLOCK_GROUP_RAID10C3)
+			ratio = 3;
+		else if (flags & BTRFS_BLOCK_GROUP_RAID10C4)
+			ratio = 4;
 		else
 			ratio = 1;
 
@@ -838,6 +842,10 @@ static u64 calc_chunk_size(struct chunk_info *ci)
 		return ci->size / (ci->num_stripes -2);
 	else if (ci->type & BTRFS_BLOCK_GROUP_RAID10)
 		return ci->size / (ci->num_stripes / 2);
+	else if (ci->type & BTRFS_BLOCK_GROUP_RAID10C3)
+		return ci->size / (ci->num_stripes / 3);
+	else if (ci->type & BTRFS_BLOCK_GROUP_RAID10C4)
+		return ci->size / (ci->num_stripes / 4);
 	return ci->size;
 }
 

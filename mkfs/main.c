@@ -389,6 +389,10 @@ static u64 parse_profile(const char *s)
 		return BTRFS_BLOCK_GROUP_RAID6;
 	} else if (strcasecmp(s, "raid10") == 0) {
 		return BTRFS_BLOCK_GROUP_RAID10;
+	} else if (strcasecmp(s, "raid10c3") == 0) {
+		return BTRFS_BLOCK_GROUP_RAID10C3;
+	} else if (strcasecmp(s, "raid10c4") == 0) {
+		return BTRFS_BLOCK_GROUP_RAID10C4;
 	} else if (strcasecmp(s, "dup") == 0) {
 		return BTRFS_BLOCK_GROUP_DUP;
 	} else if (strcasecmp(s, "single") == 0) {
@@ -1197,6 +1201,11 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	if ((data_profile | metadata_profile) &
 	    (BTRFS_BLOCK_GROUP_RAID1C3 | BTRFS_BLOCK_GROUP_RAID1C4)) {
 		features |= BTRFS_FEATURE_INCOMPAT_RAID1C34;
+	}
+
+	if ((data_profile | metadata_profile) &
+	    (BTRFS_BLOCK_GROUP_RAID10C3 | BTRFS_BLOCK_GROUP_RAID10C4)) {
+		features |= BTRFS_FEATURE_INCOMPAT_RAID10C34;
 	}
 
 	if (zoned) {

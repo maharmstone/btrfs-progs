@@ -695,6 +695,7 @@ int get_fsid(const char *path, u8 *fsid, int silent)
 
 static int group_profile_devs_min(u64 flag)
 {
+	/* FIXME: raid10c34 ok? */
 	switch (flag & BTRFS_BLOCK_GROUP_PROFILE_MASK) {
 	case 0: /* single */
 	case BTRFS_BLOCK_GROUP_DUP:
@@ -705,9 +706,11 @@ static int group_profile_devs_min(u64 flag)
 		return 2;
 	case BTRFS_BLOCK_GROUP_RAID6:
 	case BTRFS_BLOCK_GROUP_RAID1C3:
+	case BTRFS_BLOCK_GROUP_RAID10C3:
 		return 3;
 	case BTRFS_BLOCK_GROUP_RAID10:
 	case BTRFS_BLOCK_GROUP_RAID1C4:
+	case BTRFS_BLOCK_GROUP_RAID10C4:
 		return 4;
 	default:
 		return -1;
@@ -724,10 +727,12 @@ int test_num_disk_vs_raid(u64 metadata_profile, u64 data_profile,
 	default:
 	case 4:
 		allowed |= BTRFS_BLOCK_GROUP_RAID10;
-		allowed |= BTRFS_BLOCK_GROUP_RAID10 | BTRFS_BLOCK_GROUP_RAID1C4;
+		allowed |= BTRFS_BLOCK_GROUP_RAID1C4;
+		allowed |= BTRFS_BLOCK_GROUP_RAID10C4;
 		/* fallthrough */
 	case 3:
 		allowed |= BTRFS_BLOCK_GROUP_RAID6 | BTRFS_BLOCK_GROUP_RAID1C3;
+		allowed |= BTRFS_BLOCK_GROUP_RAID10C3;
 		/* fallthrough */
 	case 2:
 		allowed |= BTRFS_BLOCK_GROUP_RAID0 | BTRFS_BLOCK_GROUP_RAID1 |
@@ -782,8 +787,10 @@ int group_profile_max_safe_loss(u64 flags)
 		return 1;
 	case BTRFS_BLOCK_GROUP_RAID6:
 	case BTRFS_BLOCK_GROUP_RAID1C3:
+	case BTRFS_BLOCK_GROUP_RAID10C3:
 		return 2;
 	case BTRFS_BLOCK_GROUP_RAID1C4:
+	case BTRFS_BLOCK_GROUP_RAID10C4:
 		return 3;
 	default:
 		return -1;
@@ -1221,6 +1228,10 @@ const char* btrfs_group_profile_str(u64 flag)
 		return "DUP";
 	case BTRFS_BLOCK_GROUP_RAID10:
 		return "RAID10";
+	case BTRFS_BLOCK_GROUP_RAID10C3:
+		return "RAID10C3";
+	case BTRFS_BLOCK_GROUP_RAID10C4:
+		return "RAID10C4";
 	default:
 		return "unknown";
 	}

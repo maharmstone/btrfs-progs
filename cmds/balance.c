@@ -52,6 +52,10 @@ static int parse_one_profile(const char *profile, u64 *flags)
 		*flags |= BTRFS_BLOCK_GROUP_RAID1C4;
 	} else if (!strcmp(profile, "raid10")) {
 		*flags |= BTRFS_BLOCK_GROUP_RAID10;
+	} else if (!strcmp(profile, "raid10c3")) {
+		*flags |= BTRFS_BLOCK_GROUP_RAID10C3;
+	} else if (!strcmp(profile, "raid10c4")) {
+		*flags |= BTRFS_BLOCK_GROUP_RAID10C4;
 	} else if (!strcmp(profile, "raid5")) {
 		*flags |= BTRFS_BLOCK_GROUP_RAID5;
 	} else if (!strcmp(profile, "raid6")) {

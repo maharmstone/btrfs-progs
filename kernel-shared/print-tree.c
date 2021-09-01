@@ -196,6 +196,12 @@ static void bg_flags_to_str(u64 flags, char *ret)
 	case BTRFS_BLOCK_GROUP_RAID10:
 		strcat(ret, "|RAID10");
 		break;
+	case BTRFS_BLOCK_GROUP_RAID10C3:
+		strcat(ret, "|RAID10C3");
+		break;
+	case BTRFS_BLOCK_GROUP_RAID10C4:
+		strcat(ret, "|RAID10C4");
+		break;
 	case BTRFS_BLOCK_GROUP_RAID5:
 		strcat(ret, "|RAID5");
 		break;
@@ -1690,6 +1696,7 @@ static struct readable_flag_entry incompat_flags_array[] = {
 	DEF_INCOMPAT_FLAG_ENTRY(METADATA_UUID),
 	DEF_INCOMPAT_FLAG_ENTRY(RAID1C34),
 	DEF_INCOMPAT_FLAG_ENTRY(ZONED),
+	DEF_INCOMPAT_FLAG_ENTRY(RAID10C34),
 };
 static const int incompat_flags_num = sizeof(incompat_flags_array) /
 				      sizeof(struct readable_flag_entry);

@@ -143,6 +143,10 @@ static inline enum btrfs_raid_types btrfs_bg_flags_to_raid_index(u64 flags)
 {
 	if (flags & BTRFS_BLOCK_GROUP_RAID10)
 		return BTRFS_RAID_RAID10;
+	else if (flags & BTRFS_BLOCK_GROUP_RAID10C3)
+		return BTRFS_RAID_RAID1C3;
+	else if (flags & BTRFS_BLOCK_GROUP_RAID10C4)
+		return BTRFS_RAID_RAID10C4;
 	else if (flags & BTRFS_BLOCK_GROUP_RAID1)
 		return BTRFS_RAID_RAID1;
 	else if (flags & BTRFS_BLOCK_GROUP_RAID1C3)
