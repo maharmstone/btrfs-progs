@@ -36,7 +36,21 @@ struct directory_name_entry {
 	struct list_head list;
 };
 
-int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root);
+struct rootdir_subvol {
+	struct list_head list;
+	struct list_head child_list;
+	char *dir;
+	char *fullpath;
+	struct rootdir_subvol *parent;
+	u64 parent_inum;
+	struct list_head children;
+	unsigned int depth;
+	u64 objectid;
+	struct btrfs_root *root;
+};
+
+int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root,
+			struct list_head *subvol_children);
 u64 btrfs_mkfs_size_dir(const char *dir_name, u32 sectorsize, u64 min_dev_size,
 			u64 meta_profile, u64 data_profile);
 int btrfs_mkfs_shrink_fs(struct btrfs_fs_info *fs_info, u64 *new_size_ret,

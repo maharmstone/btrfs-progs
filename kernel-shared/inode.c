@@ -584,7 +584,8 @@ out:
 
 struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 				  const char *base, u64 root_objectid,
-				  bool convert)
+				  bool convert, u64 dirid,
+				  bool dont_change_size)
 {
 	struct btrfs_trans_handle *trans;
 	struct btrfs_fs_info *fs_info = root->fs_info;
@@ -594,7 +595,6 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 	struct btrfs_inode_item *inode_item;
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
-	u64 dirid = btrfs_root_dirid(&root->root_item);
 	u64 index = 2;
 	char buf[BTRFS_NAME_LEN + 1]; /* for snprintf null */
 	int len;
@@ -632,20 +632,6 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 		goto fail;
 	}
 
-	key.objectid = dirid;
-	key.type =  BTRFS_INODE_ITEM_KEY;
-	key.offset = 0;
-
-	ret = btrfs_lookup_inode(trans, root, &path, &key, 1);
-	if (ret) {
-		error("search for INODE_ITEM %llu failed: %d",
-				(unsigned long long)dirid, ret);
-		goto fail;
-	}
-	leaf = path.nodes[0];
-	inode_item = btrfs_item_ptr(leaf, path.slots[0],
-				    struct btrfs_inode_item);
-
 	key.objectid = root_objectid;
 	key.type = BTRFS_ROOT_ITEM_KEY;
 	key.offset = (u64)-1;
@@ -670,10 +656,26 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 	if (ret)
 		goto fail;
 
-	btrfs_set_inode_size(leaf, inode_item, len * 2 +
-			     btrfs_inode_size(leaf, inode_item));
-	btrfs_mark_buffer_dirty(leaf);
-	btrfs_release_path(&path);
+	if (!dont_change_size) {
+		key.objectid = dirid;
+		key.type =  BTRFS_INODE_ITEM_KEY;
+		key.offset = 0;
+
+		ret = btrfs_lookup_inode(trans, root, &path, &key, 1);
+		if (ret) {
+			error("search for INODE_ITEM %llu failed: %d",
+					(unsigned long long)dirid, ret);
+			goto fail;
+		}
+		leaf = path.nodes[0];
+		inode_item = btrfs_item_ptr(leaf, path.slots[0],
+					struct btrfs_inode_item);
+
+		btrfs_set_inode_size(leaf, inode_item, len * 2 +
+				btrfs_inode_size(leaf, inode_item));
+		btrfs_mark_buffer_dirty(leaf);
+		btrfs_release_path(&path);
+	}
 
 	/* add the backref first */
 	ret = btrfs_add_root_ref(trans, tree_root, root_objectid,
@@ -702,6 +704,10 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 		error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
 		goto fail;
 	}
+
+	key.objectid = root_objectid;
+	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = (u64)-1;
 
 	new_root = btrfs_read_fs_root(fs_info, &key);
 	if (IS_ERR(new_root)) {

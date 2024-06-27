@@ -1314,7 +1314,9 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 	}
 
 	image_root = btrfs_mksubvol(root, subvol_name,
-				    CONV_IMAGE_SUBVOL_OBJECTID, true);
+				    CONV_IMAGE_SUBVOL_OBJECTID, true,
+				    btrfs_root_dirid(&root->root_item),
+				    false);
 	if (!image_root) {
 		error("unable to link subvolume %s", subvol_name);
 		goto fail;

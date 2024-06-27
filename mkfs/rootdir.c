@@ -493,7 +493,8 @@ error:
 
 static int traverse_directory(struct btrfs_trans_handle *trans,
 			      struct btrfs_root *root, const char *dir_name,
-			      struct directory_name_entry *dir_head)
+			      struct directory_name_entry *dir_head,
+			      struct list_head *subvol_children)
 {
 	int ret = 0;
 
@@ -568,6 +569,28 @@ static int traverse_directory(struct btrfs_trans_handle *trans,
 			if (bconf.verbose >= LOG_INFO) {
 				path_cat_out(tmp, parent_dir_entry->path, cur_file->d_name);
 				pr_verbose(LOG_INFO, "ADD: %s\n", tmp);
+			}
+
+			/* Omit child if it is going to be a subvolume. */
+			if (!list_empty(subvol_children) && S_ISDIR(st.st_mode)) {
+				struct rootdir_subvol *s;
+				bool skip = false;
+
+				if (bconf.verbose < LOG_INFO) {
+					path_cat_out(tmp, parent_dir_entry->path,
+						     cur_file->d_name);
+				}
+
+				list_for_each_entry(s, subvol_children, child_list) {
+					if (!strcmp(tmp, s->fullpath)) {
+						s->parent_inum = parent_inum;
+						skip = true;
+						break;
+					}
+				}
+
+				if (skip)
+					continue;
 			}
 
 			/*
@@ -680,7 +703,8 @@ fail_no_dir:
 	goto out;
 }
 
-int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root)
+int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root,
+			struct list_head *subvol_children)
 {
 	int ret;
 	struct btrfs_trans_handle *trans;
@@ -705,7 +729,8 @@ int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root)
 		goto fail;
 }
 
-	ret = traverse_directory(trans, root, source_dir, &dir_head);
+	ret = traverse_directory(trans, root, source_dir, &dir_head,
+				 subvol_children);
 	if (ret) {
 		error("unable to traverse directory %s: %d", source_dir, ret);
 		goto fail;
