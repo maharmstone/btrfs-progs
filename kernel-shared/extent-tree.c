@@ -2359,6 +2359,10 @@ int btrfs_reserve_extent(struct btrfs_trans_handle *trans,
 		alloc_profile = info->avail_system_alloc_bits &
 			        info->system_alloc_profile;
 		profile = BTRFS_BLOCK_GROUP_SYSTEM | alloc_profile;
+	} else if (root->root_key.objectid == BTRFS_REMAP_TREE_OBJECTID) {
+		alloc_profile = info->avail_metadata_alloc_bits &
+			        info->metadata_alloc_profile;
+		profile = BTRFS_BLOCK_GROUP_REMAP | alloc_profile;
 	} else {
 		alloc_profile = info->avail_metadata_alloc_bits &
 			        info->metadata_alloc_profile;
@@ -2418,56 +2422,61 @@ static int alloc_reserved_tree_block(struct btrfs_trans_handle *trans,
 	ASSERT(sinfo);
 
 	ins.objectid = node->bytenr;
-	if (skinny_metadata) {
-		ins.type = BTRFS_METADATA_ITEM_KEY;
-		ins.offset = ref->level;
-	} else {
-		ins.type = BTRFS_EXTENT_ITEM_KEY;
-		ins.offset = node->num_bytes;
-		size += sizeof(struct btrfs_tree_block_info);
+
+	if (ref->root != BTRFS_REMAP_TREE_OBJECTID) {
+		if (skinny_metadata) {
+			ins.type = BTRFS_METADATA_ITEM_KEY;
+			ins.offset = ref->level;
+		} else {
+			ins.type = BTRFS_EXTENT_ITEM_KEY;
+			ins.offset = node->num_bytes;
+			size += sizeof(struct btrfs_tree_block_info);
+		}
+
+		if (ref->root == BTRFS_EXTENT_TREE_OBJECTID) {
+			ret = find_first_extent_bit(&trans->fs_info->extent_ins,
+						node->bytenr, &start, &end,
+						EXTENT_LOCKED, NULL);
+			ASSERT(!ret);
+			ASSERT(start == node->bytenr);
+			ASSERT(end == node->bytenr + node->num_bytes - 1);
+		}
+
+		path = btrfs_alloc_path();
+		if (!path)
+			return -ENOMEM;
+
+		ret = btrfs_insert_empty_item(trans, extent_root, path,
+					      &ins, size);
+		if (ret)
+			return ret;
+
+		leaf = path->nodes[0];
+		extent_item = btrfs_item_ptr(leaf, path->slots[0],
+					struct btrfs_extent_item);
+		btrfs_set_extent_refs(leaf, extent_item, 1);
+		btrfs_set_extent_generation(leaf, extent_item, trans->transid);
+		btrfs_set_extent_flags(leaf, extent_item,
+				extent_op->flags_to_set |
+				BTRFS_EXTENT_FLAG_TREE_BLOCK);
+
+		if (skinny_metadata) {
+			iref = (struct btrfs_extent_inline_ref *)(extent_item + 1);
+		} else {
+			struct btrfs_tree_block_info *block_info;
+			block_info = (struct btrfs_tree_block_info *)(extent_item + 1);
+			btrfs_set_tree_block_key(leaf, block_info, &extent_op->key);
+			btrfs_set_tree_block_level(leaf, block_info, ref->level);
+			iref = (struct btrfs_extent_inline_ref *)(block_info + 1);
+		}
+
+		btrfs_set_extent_inline_ref_type(leaf, iref,
+						 BTRFS_TREE_BLOCK_REF_KEY);
+		btrfs_set_extent_inline_ref_offset(leaf, iref, ref->root);
+
+		btrfs_mark_buffer_dirty(leaf);
+		btrfs_free_path(path);
 	}
-
-	if (ref->root == BTRFS_EXTENT_TREE_OBJECTID) {
-		ret = find_first_extent_bit(&trans->fs_info->extent_ins,
-					    node->bytenr, &start, &end,
-					    EXTENT_LOCKED, NULL);
-		ASSERT(!ret);
-		ASSERT(start == node->bytenr);
-		ASSERT(end == node->bytenr + node->num_bytes - 1);
-	}
-
-	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
-
-	ret = btrfs_insert_empty_item(trans, extent_root, path, &ins, size);
-	if (ret)
-		return ret;
-
-	leaf = path->nodes[0];
-	extent_item = btrfs_item_ptr(leaf, path->slots[0],
-				     struct btrfs_extent_item);
-	btrfs_set_extent_refs(leaf, extent_item, 1);
-	btrfs_set_extent_generation(leaf, extent_item, trans->transid);
-	btrfs_set_extent_flags(leaf, extent_item,
-			       extent_op->flags_to_set |
-			       BTRFS_EXTENT_FLAG_TREE_BLOCK);
-
-	if (skinny_metadata) {
-		iref = (struct btrfs_extent_inline_ref *)(extent_item + 1);
-	} else {
-		struct btrfs_tree_block_info *block_info;
-		block_info = (struct btrfs_tree_block_info *)(extent_item + 1);
-		btrfs_set_tree_block_key(leaf, block_info, &extent_op->key);
-		btrfs_set_tree_block_level(leaf, block_info, ref->level);
-		iref = (struct btrfs_extent_inline_ref *)(block_info + 1);
-	}
-
-	btrfs_set_extent_inline_ref_type(leaf, iref, BTRFS_TREE_BLOCK_REF_KEY);
-	btrfs_set_extent_inline_ref_offset(leaf, iref, ref->root);
-
-	btrfs_mark_buffer_dirty(leaf);
-	btrfs_free_path(path);
 
 	ret = remove_from_free_space_tree(trans, ins.objectid, fs_info->nodesize);
 	if (ret)
@@ -3065,14 +3074,17 @@ static int insert_block_group_item(struct btrfs_trans_handle *trans,
 				   struct btrfs_block_group *block_group)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
-	struct btrfs_block_group_item bgi;
+	struct btrfs_block_group_item_v2 bgi;
 	struct btrfs_root *root;
 	struct btrfs_key key;
+	size_t size;
 
-	btrfs_set_stack_block_group_used(&bgi, block_group->used);
-	btrfs_set_stack_block_group_chunk_objectid(&bgi,
+	btrfs_set_stack_block_group_v2_used(&bgi, block_group->used);
+	btrfs_set_stack_block_group_v2_chunk_objectid(&bgi,
 						   block_group->global_root_id);
-	btrfs_set_stack_block_group_flags(&bgi, block_group->flags);
+	btrfs_set_stack_block_group_v2_flags(&bgi, block_group->flags);
+	btrfs_set_stack_block_group_v2_remap_bytes(&bgi, 0);
+	btrfs_set_stack_block_group_v2_identity_remap_count(&bgi, 0);
 	key.objectid = block_group->start;
 	key.type = BTRFS_BLOCK_GROUP_ITEM_KEY;
 	key.offset = block_group->length;
@@ -3094,7 +3106,13 @@ static int insert_block_group_item(struct btrfs_trans_handle *trans,
 			root = fs_info->block_group_root;
 	}
 
-	return btrfs_insert_item(trans, root, &key, &bgi, sizeof(bgi));
+	if (btrfs_super_incompat_flags(fs_info->super_copy) &
+	    BTRFS_FEATURE_INCOMPAT_REMAP_TREE)
+		size = sizeof(bgi);
+	else
+		size = sizeof(struct btrfs_block_group_item);
+
+	return btrfs_insert_item(trans, root, &key, &bgi, size);
 }
 
 int btrfs_make_block_group(struct btrfs_trans_handle *trans,

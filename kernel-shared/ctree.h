@@ -102,7 +102,8 @@ static inline u32 __BTRFS_LEAF_DATA_SIZE(u32 nodesize)
 	 BTRFS_FEATURE_INCOMPAT_ZONED |			\
 	 BTRFS_FEATURE_INCOMPAT_EXTENT_TREE_V2 |	\
 	 BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE |	\
-	 BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA)
+	 BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA |		\
+	 BTRFS_FEATURE_INCOMPAT_REMAP_TREE)
 #else
 #define BTRFS_FEATURE_INCOMPAT_SUPP			\
 	(BTRFS_FEATURE_INCOMPAT_MIXED_BACKREF |		\
@@ -119,7 +120,8 @@ static inline u32 __BTRFS_LEAF_DATA_SIZE(u32 nodesize)
 	 BTRFS_FEATURE_INCOMPAT_METADATA_UUID |		\
 	 BTRFS_FEATURE_INCOMPAT_ZONED |			\
 	 BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE |	\
-	 BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA)
+	 BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA |		\
+	 BTRFS_FEATURE_INCOMPAT_REMAP_TREE)
 #endif
 
 /*
@@ -310,6 +312,7 @@ struct btrfs_fs_info {
 	struct btrfs_root *uuid_root;
 	struct btrfs_root *block_group_root;
 	struct btrfs_root *stripe_root;
+	struct btrfs_root *remap_root;
 
 	struct rb_root global_roots_tree;
 	struct rb_root fs_root_tree;

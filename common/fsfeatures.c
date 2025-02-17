@@ -249,6 +249,15 @@ static const struct btrfs_feature mkfs_features[] = {
 		VERSION_NULL(default),
 		.desc		= "squota support (simple accounting qgroups)"
 	},
+	{
+		.name		= "remap-tree",
+		.incompat_flag	= BTRFS_FEATURE_INCOMPAT_REMAP_TREE,
+		.sysfs_name	= "remap_tree",
+		VERSION_TO_STRING2(compat, 6,14), // FIXME??
+		VERSION_NULL(safe),
+		VERSION_NULL(default),
+		.desc		= "remap tree"
+	},
 	/* Keep this one last */
 	{
 		.name		= "list-all",
