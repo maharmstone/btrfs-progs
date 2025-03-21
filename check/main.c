@@ -4121,6 +4121,7 @@ static void print_data_backref_error(struct extent_record *rec,
 static void print_tree_backref_error(struct extent_record *rec, struct tree_backref *tback)
 {
 	struct extent_backref *back = &tback->node;
+	u64 root = back->full_backref ? tback->parent : tback->root;
 
 	/*
 	 * For tree blocks, we only handle two cases here:
@@ -4131,20 +4132,28 @@ static void print_tree_backref_error(struct extent_record *rec, struct tree_back
 	 * The refs count check is done by the global backref check at
 	 * all_backpointers_checked().
 	 */
-	if (!back->found_extent_tree) {
-		fprintf(stderr,
+	if (root == BTRFS_REMAP_TREE_OBJECTID) {
+		if (back->found_extent_tree) {
+			fprintf(stderr,
+"tree extent[%llu, %llu] %s %llu has unexpected backref item in extent tree\n",
+				rec->start, rec->max_size,
+				(back->full_backref ? "parent" : "root"), root);
+			return;
+		}
+	} else {
+		if (!back->found_extent_tree) {
+			fprintf(stderr,
 "tree extent[%llu, %llu] %s %llu has no backref item in extent tree\n",
-			rec->start, rec->max_size,
-			(back->full_backref ? "parent" : "root"),
-			(back->full_backref ? tback->parent : tback->root));
-		return;
+				rec->start, rec->max_size,
+				(back->full_backref ? "parent" : "root"), root);
+			return;
+		}
 	}
 	if (!back->found_ref) {
 		fprintf(stderr,
 "tree extent[%llu, %llu] %s %llu has no tree block found\n",
 			rec->start, rec->max_size,
-			(back->full_backref ? "parent" : "root"),
-			(back->full_backref ? tback->parent : tback->root));
+			(back->full_backref ? "parent" : "root"), root);
 		return;
 	}
 }
@@ -4167,7 +4176,16 @@ static int all_backpointers_checked(struct extent_record *rec, int print_errs)
 
 	rbtree_postorder_for_each_entry_safe(back, tmp,
 					     &rec->backref_tree, node) {
-		if (!back->found_extent_tree) {
+		bool remap_tree = false;
+
+		if (!back->is_data) {
+			struct tree_backref *tback = to_tree_backref(back);
+			u64 root = back->full_backref ? tback->parent : tback->root;
+
+			remap_tree = root == BTRFS_REMAP_TREE_OBJECTID;
+		}
+
+		if (!!remap_tree != !back->found_extent_tree) {
 			err = 1;
 			if (!print_errs)
 				goto out;
@@ -4763,7 +4781,8 @@ static void check_extent_type(struct extent_record *rec)
 
 	/* metadata extent, check the obvious case first */
 	if (!(bg_cache->flags & (BTRFS_BLOCK_GROUP_SYSTEM |
-				 BTRFS_BLOCK_GROUP_METADATA))) {
+				 BTRFS_BLOCK_GROUP_METADATA |
+				 BTRFS_BLOCK_GROUP_REMAP))) {
 		rec->wrong_chunk_type = 1;
 		return;
 	}
@@ -4787,6 +4806,8 @@ static void check_extent_type(struct extent_record *rec)
 
 		if (tback->root == BTRFS_CHUNK_TREE_OBJECTID)
 			bg_type = BTRFS_BLOCK_GROUP_SYSTEM;
+		else if (tback->root == BTRFS_REMAP_TREE_OBJECTID)
+			bg_type = BTRFS_BLOCK_GROUP_REMAP;
 		else
 			bg_type = BTRFS_BLOCK_GROUP_METADATA;
 		if (!(bg_cache->flags & bg_type))
@@ -4827,6 +4848,7 @@ static int add_extent_rec_nolookup(struct cache_tree *extent_cache,
 	rec->parent_generation = tmpl->parent_generation;
 	rec->generation = tmpl->generation;
 	rec->level = tmpl->level;
+	rec->remap_tree = tmpl->remap_tree;
 	INIT_LIST_HEAD(&rec->backrefs);
 	INIT_LIST_HEAD(&rec->dups);
 	INIT_LIST_HEAD(&rec->list);
@@ -6651,9 +6673,15 @@ static int run_next_block(struct btrfs_root *root,
 			tmpl.refs = 1;
 			tmpl.metadata = 1;
 			tmpl.max_size = size;
+			tmpl.remap_tree = ri->objectid == BTRFS_REMAP_TREE_OBJECTID ? 1 : 0;
 			ret = add_extent_rec(extent_cache, &tmpl);
 			if (ret < 0)
 				goto out;
+
+			if (tmpl.remap_tree) {
+				update_block_group_used(block_group_cache, ptr,
+							size);
+			}
 
 			ret = add_tree_backref(extent_cache, ptr, parent,
 					owner, 1);
@@ -6687,6 +6715,7 @@ static int add_root_to_pending(struct extent_buffer *buf,
 			       struct cache_tree *pending,
 			       struct cache_tree *seen,
 			       struct cache_tree *nodes,
+			       struct block_group_tree *block_group_cache,
 			       u64 objectid)
 {
 	struct extent_record tmpl;
@@ -6704,7 +6733,11 @@ static int add_root_to_pending(struct extent_buffer *buf,
 	tmpl.refs = 1;
 	tmpl.metadata = 1;
 	tmpl.max_size = buf->len;
+	tmpl.remap_tree = objectid == BTRFS_REMAP_TREE_OBJECTID ? 1 : 0;
 	add_extent_rec(extent_cache, &tmpl);
+
+	if (tmpl.remap_tree)
+		update_block_group_used(block_group_cache, buf->start, buf->len);
 
 	if (objectid == BTRFS_TREE_RELOC_OBJECTID ||
 	    btrfs_header_backref_rev(buf) < BTRFS_MIXED_BACKREF_REV)
@@ -8246,14 +8279,21 @@ static int check_extent_refs(struct btrfs_root *root,
 			}
 		}
 
-		if (rec->metadata && rec->level != rec->info_level) {
+		if (rec->metadata && !rec->remap_tree &&
+		    rec->level != rec->info_level) {
 			fprintf(stderr,
 				"metadata level mismatch on [%llu, %llu]\n",
 				rec->start, rec->nr);
 			cur_err = 1;
 		}
 
-		if (rec->refs != rec->extent_item_refs) {
+		if (rec->remap_tree && rec->extent_item_refs != 0) {
+			fprintf(stderr, "ref mismatch on [%llu %llu] ",
+				rec->start, rec->nr);
+			fprintf(stderr, "extent item %llu, expected 0\n",
+				rec->extent_item_refs);
+			cur_err = 1;
+		} else if (!rec->remap_tree && rec->refs != rec->extent_item_refs) {
 			fprintf(stderr, "ref mismatch on [%llu %llu] ",
 				rec->start, rec->nr);
 			fprintf(stderr, "extent item %llu, found %llu\n",
@@ -8753,7 +8793,8 @@ static int deal_root_from_list(struct list_head *list,
 			break;
 		}
 		ret = add_root_to_pending(buf, extent_cache, pending,
-				    seen, nodes, rec->objectid);
+				    seen, nodes, block_group_cache,
+				    rec->objectid);
 		if (ret < 0)
 			break;
 		/*

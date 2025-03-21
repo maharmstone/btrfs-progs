@@ -1235,6 +1235,21 @@ tree_root:
 		return -EIO;
 	}
 
+	if (btrfs_fs_incompat(fs_info, REMAP_TREE) && btrfs_super_remap_root(sb) != 0) {
+		bytenr = btrfs_super_remap_root(sb);
+		gen = btrfs_super_remap_root_generation(sb);
+		level = btrfs_super_remap_root_level(sb);
+
+		root = fs_info->remap_root;
+		btrfs_setup_root(root, fs_info, BTRFS_REMAP_TREE_OBJECTID);
+
+		ret = read_root_node(fs_info, root, bytenr, gen, level);
+		if (ret) {
+			btrfs_warn(fs_info, "couldn't read remap root");
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
@@ -1312,18 +1327,6 @@ int btrfs_setup_all_roots(struct btrfs_fs_info *fs_info, u64 root_tree_bytenr,
 			fs_info->stripe_root = NULL;
 		} else {
 			set_bit(BTRFS_ROOT_TRACK_DIRTY, &fs_info->stripe_root->state);
-		}
-	}
-
-	if (btrfs_fs_incompat(fs_info, REMAP_TREE)) {
-		ret = btrfs_find_and_setup_root(root, fs_info,
-						BTRFS_REMAP_TREE_OBJECTID,
-						fs_info->remap_root);
-		if (ret) {
-			kfree(fs_info->remap_root);
-			fs_info->remap_root = NULL;
-		} else {
-			set_bit(BTRFS_ROOT_TRACK_DIRTY, &fs_info->remap_root->state);
 		}
 	}
 

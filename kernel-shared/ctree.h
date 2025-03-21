@@ -53,9 +53,8 @@ struct btrfs_mapping_tree {
 
 static inline unsigned long btrfs_chunk_item_size(int num_stripes)
 {
-	BUG_ON(num_stripes == 0);
-	return sizeof(struct btrfs_chunk) +
-		sizeof(struct btrfs_stripe) * (num_stripes - 1);
+	return offsetof(struct btrfs_chunk, stripe) +
+		sizeof(struct btrfs_stripe) * num_stripes;
 }
 
 static inline u32 __BTRFS_LEAF_DATA_SIZE(u32 nodesize)
@@ -297,6 +296,8 @@ struct btrfs_block_group {
 	bool zone_is_active;
 
 	u64 global_root_id;
+	u64 remap_bytes;
+	u32 identity_remap_count;
 };
 
 struct btrfs_device;
@@ -673,6 +674,10 @@ static inline u32 BTRFS_MAX_XATTR_SIZE(const struct btrfs_fs_info *info)
 #define BTRFS_CHUNK_ITEM_KEY	228
 
 #define BTRFS_RAID_STRIPE_KEY	230
+
+#define BTRFS_IDENTITY_REMAP_KEY	234
+#define BTRFS_REMAP_KEY			235
+#define BTRFS_REMAP_BACKREF_KEY		236
 
 #define BTRFS_BALANCE_ITEM_KEY	248
 

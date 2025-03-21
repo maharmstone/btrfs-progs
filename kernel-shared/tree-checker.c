@@ -853,7 +853,7 @@ int btrfs_check_chunk_valid(struct extent_buffer *leaf,
 	u16 sub_stripes;
 	u64 type;
 	u64 features;
-	bool mixed = false;
+	bool mixed = false, remapped;
 	int raid_index;
 	int nparity;
 	int ncopies;
@@ -867,12 +867,14 @@ int btrfs_check_chunk_valid(struct extent_buffer *leaf,
 	ncopies = btrfs_raid_array[raid_index].ncopies;
 	nparity = btrfs_raid_array[raid_index].nparity;
 
-	if (unlikely(!num_stripes)) {
+	remapped = type & BTRFS_BLOCK_GROUP_REMAPPED;
+
+	if (unlikely(!remapped && !num_stripes)) {
 		chunk_err(leaf, chunk, logical,
 			  "invalid chunk num_stripes, have %u", num_stripes);
 		return -EUCLEAN;
 	}
-	if (unlikely(num_stripes < ncopies)) {
+	if (unlikely(!remapped && num_stripes < ncopies)) {
 		chunk_err(leaf, chunk, logical,
 			  "invalid chunk num_stripes < ncopies, have %u < %d",
 			  num_stripes, ncopies);
@@ -929,11 +931,13 @@ int btrfs_check_chunk_valid(struct extent_buffer *leaf,
 		return -EUCLEAN;
 	}
 	if (unlikely(type & ~(BTRFS_BLOCK_GROUP_TYPE_MASK |
-			      BTRFS_BLOCK_GROUP_PROFILE_MASK))) {
+			      BTRFS_BLOCK_GROUP_PROFILE_MASK |
+			      BTRFS_BLOCK_GROUP_REMAPPED))) {
 		chunk_err(leaf, chunk, logical,
 			  "unrecognized chunk type: 0x%llx",
 			  ~(BTRFS_BLOCK_GROUP_TYPE_MASK |
-			    BTRFS_BLOCK_GROUP_PROFILE_MASK) &
+			    BTRFS_BLOCK_GROUP_PROFILE_MASK |
+			    BTRFS_BLOCK_GROUP_REMAPPED) &
 			  btrfs_chunk_type(leaf, chunk));
 		return -EUCLEAN;
 	}
@@ -974,7 +978,7 @@ int btrfs_check_chunk_valid(struct extent_buffer *leaf,
 		}
 	}
 
-	if (unlikely((type & BTRFS_BLOCK_GROUP_RAID10 &&
+	if (unlikely(!remapped && ((type & BTRFS_BLOCK_GROUP_RAID10 &&
 		      sub_stripes != btrfs_raid_array[BTRFS_RAID_RAID10].sub_stripes) ||
 		     (type & BTRFS_BLOCK_GROUP_RAID1 &&
 		      num_stripes != btrfs_raid_array[BTRFS_RAID_RAID1].devs_min) ||
@@ -989,7 +993,7 @@ int btrfs_check_chunk_valid(struct extent_buffer *leaf,
 		     (type & BTRFS_BLOCK_GROUP_DUP &&
 		      num_stripes != btrfs_raid_array[BTRFS_RAID_DUP].dev_stripes) ||
 		     ((type & BTRFS_BLOCK_GROUP_PROFILE_MASK) == 0 &&
-		      num_stripes != btrfs_raid_array[BTRFS_RAID_SINGLE].dev_stripes))) {
+		      num_stripes != btrfs_raid_array[BTRFS_RAID_SINGLE].dev_stripes)))) {
 		chunk_err(leaf, chunk, logical,
 			"invalid num_stripes:sub_stripes %u:%u for profile %llu",
 			num_stripes, sub_stripes,

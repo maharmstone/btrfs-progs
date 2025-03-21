@@ -2694,10 +2694,11 @@ error:
 
 static int read_block_group_item(struct btrfs_block_group *cache,
 				 struct btrfs_path *path,
-				 const struct btrfs_key *key)
+				 const struct btrfs_key *key, bool remap_tree)
 {
 	struct extent_buffer *leaf = path->nodes[0];
-	struct btrfs_block_group_item bgi;
+	struct btrfs_block_group_item_v2 bgi;
+	size_t bgi_size;
 	int slot = path->slots[0];
 
 	ASSERT(key->type == BTRFS_BLOCK_GROUP_ITEM_KEY);
@@ -2705,11 +2706,25 @@ static int read_block_group_item(struct btrfs_block_group *cache,
 	cache->start = key->objectid;
 	cache->length = key->offset;
 
+	if (remap_tree)
+		bgi_size = sizeof(struct btrfs_block_group_item_v2);
+	else
+		bgi_size = sizeof(struct btrfs_block_group_item);
+
 	read_extent_buffer(leaf, &bgi, btrfs_item_ptr_offset(leaf, slot),
-			   sizeof(bgi));
-	cache->used = btrfs_stack_block_group_used(&bgi);
-	cache->flags = btrfs_stack_block_group_flags(&bgi);
-	cache->global_root_id = btrfs_stack_block_group_chunk_objectid(&bgi);
+			   bgi_size);
+	cache->used = btrfs_stack_block_group_v2_used(&bgi);
+	cache->flags = btrfs_stack_block_group_v2_flags(&bgi);
+	cache->global_root_id = btrfs_stack_block_group_v2_chunk_objectid(&bgi);
+
+	if (remap_tree) {
+		cache->remap_bytes = btrfs_stack_block_group_v2_remap_bytes(&bgi);
+		cache->identity_remap_count =
+			btrfs_stack_block_group_v2_identity_remap_count(&bgi);
+	} else {
+		cache->remap_bytes = 0;
+		cache->identity_remap_count = 0;
+	}
 
 	return 0;
 }
@@ -2743,7 +2758,8 @@ static int read_one_block_group(struct btrfs_fs_info *fs_info,
 	cache = kzalloc(sizeof(*cache), GFP_NOFS);
 	if (!cache)
 		return -ENOMEM;
-	ret = read_block_group_item(cache, path, &key);
+	ret = read_block_group_item(cache, path, &key,
+				    btrfs_fs_incompat(fs_info, REMAP_TREE));
 	if (ret < 0) {
 		kfree(cache);
 		return ret;
