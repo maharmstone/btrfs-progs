@@ -59,6 +59,10 @@ static int add_info_to_list(struct array *chunkinfos, struct btrfs_chunk *chunk)
 	int num_stripes = btrfs_stack_chunk_num_stripes(chunk);
 	int j;
 
+	/* ignore fully-remapped chunks */
+	if (num_stripes == 0)
+		return 0;
+
 	for (j = 0 ; j < num_stripes ; j++) {
 		int i;
 		struct chunk_info *p = NULL;
